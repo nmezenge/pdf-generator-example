@@ -1,0 +1,70 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<mule xmlns:file="http://www.mulesoft.org/schema/mule/file" xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core"
+	xmlns:http="http://www.mulesoft.org/schema/mule/http"
+	xmlns="http://www.mulesoft.org/schema/mule/core" xmlns:doc="http://www.mulesoft.org/schema/mule/documentation" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd
+http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd
+http://www.mulesoft.org/schema/mule/file http://www.mulesoft.org/schema/mule/file/current/mule-file.xsd">
+	<http:listener-config name="HTTP_Listener_config" doc:name="HTTP Listener config" doc:id="610eb5dd-a997-4c11-9c71-2f9650ec9565" >
+		<http:listener-connection host="0.0.0.0" port="8081" />
+	</http:listener-config>
+	<file:config name="File_Config" doc:name="File Config" doc:id="69fb6174-549a-45ac-bf1b-aa1056044ea8" />
+	<flow name="pdf-generatorFlow1" doc:id="b7585dc0-d7dc-4208-8af7-8d0b2ee5ba52" >
+		<http:listener doc:name="Listener" doc:id="28230646-5f77-4be7-8602-9b2dce21bd73" path="/jsonPdf" config-ref="HTTP_Listener_config"/>
+		<ee:transform doc:name="Json2Text" doc:id="cb016b88-fa70-47a3-a4bb-9434312dd562" >
+			<ee:message >
+				<ee:set-payload ><![CDATA[%dw 2.0
+output text/plain
+---
+"Name: "++ (payload.name default "")++
+"\nCompany: "++ (payload.company default "")++
+"\nCountry: "++(payload.country default "")]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+		<ee:transform doc:name="Text2Pdf" doc:id="02401cfc-b044-4f38-96e2-a3a16b365c00" >
+			<ee:message >
+				<ee:set-payload ><![CDATA[%dw 2.0
+import java!com::pdf::jsonToPdfClass
+output application/java
+---
+{
+	pdf:jsonToPdfClass::jsonToPdf("${mule.home}/apps/${app.name}" ++ "/pdfFile.pdf",write(payload,'text'))
+}
+]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+		<file:read doc:name="Read Pdf" doc:id="d044b521-8ff8-4638-8569-a89b09f2397d" path="${mule.home}/apps/${app.name}/pdfFile.pdf" outputMimeType="application/pdf" target="pdfFile"/>
+		<logger level="INFO" doc:name="Logger" doc:id="a831a367-e278-4972-a6b0-f895fe56333c" message="#[payload]"/>
+		<ee:transform doc:name="Transform Message" doc:id="5f5a844c-7612-42ca-9e76-6480c79cf6b1" >
+			<ee:message >
+				<ee:set-payload ><![CDATA[%dw 2.0
+output application/java
+import * from dw::core::Binaries
+---
+toBase64(vars.pdfFile)]]></ee:set-payload>
+			</ee:message>
+			<ee:variables />
+		</ee:transform>
+		<ee:transform doc:name="Transform Message" doc:id="fc06f842-37e2-4d99-92ab-1654ffa45c9d" >
+			<ee:message >
+				<ee:set-payload ><![CDATA[%dw 2.0
+import * from dw::core::Binaries
+output multipart/form-data
+---
+{
+	parts:{
+		base64Content:{
+			headers:{
+				"Content-Type":"application/pdf"
+			},
+			content: fromBase64(payload)
+		}
+	}
+}]]></ee:set-payload>
+			</ee:message>
+			<ee:variables />
+		</ee:transform>
+		<set-payload value="#[payload]" doc:name="Set Payload" doc:id="225ea146-df1e-4479-ae77-42e8a2e576ef" mimeType="application/pdf" />
+	</flow>
+</mule>
